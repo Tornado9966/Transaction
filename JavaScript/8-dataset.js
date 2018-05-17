@@ -1,5 +1,15 @@
 'use strict';
 
+let flagForAutoCommit = false;
+let isAutoCommit = false;
+let timeForAutoCommit = 0;
+
+let flagForAutoRollback = false;
+let isAutoRollback = false;
+let timeForAutoRollback = 0;
+
+let change = false;
+
 function Transaction() {}
 
 Transaction.start = (data) => {
@@ -13,6 +23,20 @@ Transaction.start = (data) => {
     const event = events[name];
     for (const listener of event) listener(data);
   };
+  
+  function auto() {
+    if (change) {
+      if (isAutoCommit) {
+        flagForAutoCommit = true;
+        methods.autoCommit(timeForAutoCommit);
+      }
+      if (isAutoRollback) {
+        flagForAutoRollback = true;
+        methods.autoRollback(timeForAutoRollback);
+      }
+      change = false;
+    }
+  }
 
   const methods = {
     commit: () => {
@@ -32,6 +56,40 @@ Transaction.start = (data) => {
     on: (name, callback) => {
       const event = events[name];
       if (event) event.push(callback);
+    }
+    timeout: (msec) => {
+      setTimeout(() => {
+        delta = {};
+        console.log('Rollback');
+      }, msec);
+    },
+    autoCommit: (msec) => {
+      isAutoCommit = true;
+      timeForAutoCommit = msec;
+      if (flagForAutoCommit) {
+        setTimeout(() => {
+          Object.assign(data, delta);
+          delta = {};
+          console.log('AutoCommit');
+        }, msec);
+        flagForAutoCommit = false;
+      }
+    },
+    autoRollback: (msec) => {
+      isAutoRollback = true;
+      timeForAutoRollback = msec;
+      if (flagForAutoRollback) {
+        setTimeout(() => {
+          delta = {};
+          console.log('AutoRollback');
+        }, msec);
+        flagForAutoRollback = false;
+      }
+    },
+    clearTimeout: () => {
+      isAutoCommit = false;
+      isAutoRollback = false;
+      console.log('Timeouts are turned off');
     }
   };
 
@@ -53,9 +111,11 @@ Transaction.start = (data) => {
       return keys.filter((x, i, a) => a.indexOf(x) === i);
     },
     set(target, key, val) {
+      change = true;
       console.log('set', key, val);
       if (target[key] === val) delete delta[key];
       else delta[key] = val;
+      auto();
       return true;
     }
   });
